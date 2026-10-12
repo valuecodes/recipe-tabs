@@ -4,7 +4,7 @@ import { normalizeRecipeUrl } from "~/lib/url";
 
 type CaptureResult =
   | { ok: true; tabId: number; capture: PageCapture }
-  | { ok: false; message: string };
+  | { ok: false; message: string; detail?: string };
 
 const CANNOT_READ = "Recipe Tabs can't read this kind of page";
 const CLICK_ICON = "Click the Recipe Tabs icon on this tab first";
@@ -47,8 +47,11 @@ const extractActiveTab = async (): Promise<CaptureResult> => {
       ? { ok: true, tabId: tab.id, capture: result }
       : { ok: false, message: GENERIC };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, message: describeCaptureError(message) };
+    // Chrome's own text, kept for the panel and the console: the mapped
+    // message alone cannot tell a missing grant from a restricted page.
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn("executeScript failed", error);
+    return { ok: false, message: describeCaptureError(detail), detail };
   }
 };
 
