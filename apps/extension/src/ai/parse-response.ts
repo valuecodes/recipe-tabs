@@ -1,4 +1,6 @@
+import { CATEGORIES } from "~/ai/schemas";
 import { isFiniteNumber, isRecord, isString } from "~/lib/guards";
+import type { Classification } from "~/lib/recipe";
 
 // Model output is untrusted text: parse it, keep the items that fit, and turn
 // everything else into a warning. Never throws.
@@ -104,5 +106,45 @@ const parseTextIngredients = (raw: string): Parsed<TextIngredient> => {
   return withWarning(items, list.length);
 };
 
+type ModelClassification = Omit<Classification, "source">;
+
+const MAX_DISH = 60;
+const MAX_CUISINE = 40;
+
+const CATEGORY_LIST: readonly string[] = CATEGORIES;
+
+const normalizeLabel = (value: unknown): string =>
+  isString(value) ? value.replaceAll(/\s+/g, " ").trim().toLowerCase() : "";
+
+// The dish and category must be usable, or the answer is rejected (the step
+// fails and "Finish AI" asks again); an unusable cuisine is just dropped.
+const parseClassification = (
+  raw: string
+): { classification?: ModelClassification; warning?: string } => {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { warning: NOT_JSON };
+  }
+  if (!isRecord(value)) {
+    return { warning: WRONG_SHAPE };
+  }
+  const dish = normalizeLabel(value.dish);
+  if (dish === "" || dish.length > MAX_DISH) {
+    return { warning: "The AI's answer had no usable dish name" };
+  }
+  const category = normalizeLabel(value.category);
+  if (!CATEGORY_LIST.includes(category)) {
+    return { warning: "The AI's answer had an unknown category" };
+  }
+  const classification: ModelClassification = { dish, category };
+  const cuisine = normalizeLabel(value.cuisine);
+  if (cuisine !== "" && cuisine.length <= MAX_CUISINE) {
+    classification.cuisine = cuisine;
+  }
+  return { classification };
+};
+
 export type { IndexedIngredient, TextIngredient };
-export { parseIndexedIngredients, parseTextIngredients };
+export { parseClassification, parseIndexedIngredients, parseTextIngredients };

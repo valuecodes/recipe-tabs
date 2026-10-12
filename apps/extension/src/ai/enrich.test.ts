@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createEnricher, heldEnrichmentIds } from "~/ai/enrich";
-import type { Recipe } from "~/lib/recipe";
+import type { EnrichStep, Recipe } from "~/lib/recipe";
 import { createChromeStorageRepository } from "~/storage/chrome-storage-repository";
 import type { RecipeRepository } from "~/storage/repository";
 import { createStorageStub } from "~/test/chrome-stub";
@@ -31,6 +31,11 @@ const quotaError = (): Error =>
   new DOMException("Input too large", "QuotaExceededError");
 
 const FINNISH = [{ detectedLanguage: "fi", confidence: 0.95 }];
+
+// The classification step's answer, queued after the ingredient answers.
+const CLASSIFIED = JSON.stringify({ dish: "Pancake", category: "breakfast" });
+
+const BOTH_STEPS: EnrichStep[] = ["ingredients", "classification"];
 
 describe("createEnricher", () => {
   let storage: ReturnType<typeof createStorageStub>;
@@ -82,6 +87,7 @@ describe("createEnricher", () => {
           { index: 1, name: "milk", quantity: 2, unit: "dl" },
           { index: 2, name: "egg", quantity: 1 },
         ]),
+        CLASSIFIED,
       ]
     );
     expect(stored?.titleEn).toBe("EN Pannukakku");
@@ -98,14 +104,23 @@ describe("createEnricher", () => {
     ]);
     expect(stored?.enrichment).toMatchObject({
       status: "done",
-      completed: ["ingredients"],
+      completed: BOTH_STEPS,
     });
     expect(ai.calls.prompts[0]?.input).toContain("1. EN 2 dl maitoa");
+    // Classification sees only English: the translated title and the names.
+    expect(ai.calls.prompts[1]?.input).toContain("Title: EN Pannukakku");
+    expect(ai.calls.prompts[1]?.input).toContain("Ingredients: milk, egg");
+    expect(stored?.classification).toEqual({
+      dish: "pancake",
+      category: "breakfast",
+      source: "ai",
+    });
   });
 
   it("does not translate an English recipe", async () => {
     const stored = await enrich(makeRecipe(), [
       answer([{ index: 1, name: "milk" }]),
+      CLASSIFIED,
     ]);
     expect(ai.calls.translated).toEqual([]);
     expect(stored?.titleEn).toBeUndefined();
@@ -129,6 +144,7 @@ describe("createEnricher", () => {
           { text: "3 cups of unicorn tears", name: "tears" },
           { text: "2 DL  milk", name: "milk again" },
         ]),
+        CLASSIFIED,
       ]
     );
     expect(stored?.ingredients).toEqual([
@@ -145,16 +161,17 @@ describe("createEnricher", () => {
   it("warns when the page text has no ingredients heading", async () => {
     const stored = await enrich(
       makeRecipe({ ingredients: [], pageText: "2 dl milk and a story" }),
-      [answer([{ text: "2 dl milk", name: "milk" }])]
+      [answer([{ text: "2 dl milk", name: "milk" }]), CLASSIFIED]
     );
     expect(stored?.extraction.warnings).toContain(
       "No ingredients heading found on the page"
     );
   });
 
-  it("completes without a prompt when there is no ingredient text", async () => {
-    const stored = await enrich(makeRecipe({ ingredients: [] }));
-    expect(ai.calls.prompts).toEqual([]);
+  it("reads no ingredients without text, and classifies by title", async () => {
+    const stored = await enrich(makeRecipe({ ingredients: [] }), [CLASSIFIED]);
+    expect(ai.calls.prompts).toHaveLength(1);
+    expect(ai.calls.prompts[0]?.input).toContain("Title: Pancakes");
     expect(stored?.enrichment.status).toBe("done");
     expect(stored?.extraction.warnings).toEqual(["No ingredient text to read"]);
   });
@@ -165,8 +182,13 @@ describe("createEnricher", () => {
     expect(ai.calls.prompts).toEqual([]);
     expect(ai.calls.sessionsCreated).toBe(0);
     expect(stored?.language).toBe("de");
-    expect(stored?.enrichment.status).toBe("done");
+    expect(stored?.enrichment).toMatchObject({
+      status: "done",
+      completed: BOTH_STEPS,
+    });
+    expect(stored?.classification).toBeUndefined();
     expect(stored?.extraction.warnings[0]).toMatch(/Ingredients in "de"/);
+    expect(stored?.extraction.warnings[1]).toMatch(/^Not classified/);
   });
 
   it("never prompts when the language is undetermined", async () => {
@@ -194,6 +216,7 @@ describe("createEnricher", () => {
           { text: "EN 2 dl maitoa", name: "milk", quantity: 2, unit: "dl" },
           { text: "1 muna", name: "egg" },
         ]),
+        CLASSIFIED,
       ]
     );
     expect(stored?.ingredients).toEqual([
@@ -216,15 +239,16 @@ describe("createEnricher", () => {
     const stored = await enrich(makeRecipe({ ingredients }), [
       answer([{ index: 1, name: "first" }]),
       answer([{ index: 45, name: "last" }]),
+      CLASSIFIED,
     ]);
-    expect(ai.calls.prompts).toHaveLength(2);
+    expect(ai.calls.prompts).toHaveLength(3);
     expect(ai.calls.prompts[1]?.input).toContain("\n41. line 41");
     expect(stored?.ingredients[0]?.name).toBe("first");
     expect(stored?.ingredients[44]?.name).toBe("last");
-    // One base session, one clone per prompt, all destroyed.
+    // One base session for both steps, one clone per prompt, all destroyed.
     expect(ai.calls.sessionsCreated).toBe(1);
-    expect(ai.calls.clonesCreated).toBe(2);
-    expect(ai.calls.destroyed).toBe(3);
+    expect(ai.calls.clonesCreated).toBe(3);
+    expect(ai.calls.destroyed).toBe(4);
   });
 
   it("splits a batch that overflows the context", async () => {
@@ -239,8 +263,9 @@ describe("createEnricher", () => {
         { index: 3, name: "c" },
         { index: 4, name: "d" },
       ]),
+      CLASSIFIED,
     ]);
-    expect(ai.calls.prompts).toHaveLength(3);
+    expect(ai.calls.prompts).toHaveLength(4);
     expect(stored?.ingredients.map(({ name }) => name)).toEqual([
       "a",
       "b",
@@ -256,6 +281,7 @@ describe("createEnricher", () => {
     const stored = await enrich(makeRecipe({ ingredients }), [
       "{broken",
       answer([{ index: 41, name: "last" }]),
+      CLASSIFIED,
     ]);
     expect(stored?.enrichment.status).toBe("done");
     expect(stored?.extraction.warnings).toContain(
@@ -271,13 +297,35 @@ describe("createEnricher", () => {
       error: "The AI's answer was not valid JSON",
     });
 
-    ai.answers.push(answer([{ index: 1, name: "milk" }]));
+    ai.answers.push(answer([{ index: 1, name: "milk" }]), CLASSIFIED);
     const enricher = createEnricher(repository);
     enricher.enqueue(ID);
     await enricher.idle();
     stored = await repository.get(ID);
     expect(stored?.enrichment.status).toBe("done");
     expect(stored?.enrichment.error).toBeUndefined();
+  });
+
+  it("keeps the ingredients when classification fails, then retries only it", async () => {
+    let stored = await enrich(makeRecipe(), [
+      answer([{ index: 1, name: "milk" }]),
+      JSON.stringify({ dish: "pancake", category: "brunch" }),
+    ]);
+    expect(stored?.enrichment).toMatchObject({
+      status: "failed",
+      completed: ["ingredients"],
+      error: "The AI's answer had an unknown category",
+    });
+    expect(stored?.ingredients[0]?.name).toBe("milk");
+
+    ai.answers.push(CLASSIFIED);
+    const enricher = createEnricher(repository);
+    enricher.enqueue(ID);
+    await enricher.idle();
+    stored = await repository.get(ID);
+    expect(ai.calls.prompts).toHaveLength(3);
+    expect(stored?.enrichment.completed).toEqual(BOTH_STEPS);
+    expect(stored?.classification?.dish).toBe("pancake");
   });
 
   it("records a thrown model error as failed", async () => {
@@ -320,11 +368,27 @@ describe("createEnricher", () => {
 
   it("(c) runs only missing steps", async () => {
     const stored = await enrich(
-      makeRecipe({ enrichment: { status: "done", completed: ["ingredients"] } })
+      makeRecipe({ enrichment: { status: "done", completed: BOTH_STEPS } })
     );
     expect(ai.calls.prompts).toEqual([]);
     expect(ai.calls.sessionsCreated).toBe(0);
     expect(stored?.enrichment.status).toBe("done");
+  });
+
+  it("runs only classification for a recipe finished before it shipped", async () => {
+    const stored = await enrich(
+      makeRecipe({
+        ingredients: [{ rawText: "2 dl milk", name: "milk" }],
+        enrichment: { status: "done", completed: ["ingredients"] },
+      }),
+      [CLASSIFIED]
+    );
+    expect(ai.calls.prompts).toHaveLength(1);
+    expect(ai.calls.prompts[0]?.input).toContain("Ingredients: milk");
+    expect(stored?.enrichment).toMatchObject({
+      status: "done",
+      completed: BOTH_STEPS,
+    });
   });
 
   it("(d) aborts the in-flight prompt and leaves storage alone", async () => {
@@ -364,13 +428,13 @@ describe("createEnricher", () => {
   });
 
   it("runs a recipe queued twice only once", async () => {
-    ai.answers.push(answer([{ index: 1, name: "milk" }]));
+    ai.answers.push(answer([{ index: 1, name: "milk" }]), CLASSIFIED);
     await repository.insert(makeRecipe());
     const enricher = createEnricher(repository);
     enricher.enqueue(ID);
     enricher.enqueue(ID);
     await enricher.idle();
-    expect(ai.calls.prompts).toHaveLength(1);
+    expect(ai.calls.prompts).toHaveLength(2);
     expect(await heldEnrichmentIds()).toEqual(new Set());
   });
 });

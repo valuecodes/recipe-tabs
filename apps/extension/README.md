@@ -2,7 +2,8 @@
 
 A Chrome extension for saving recipes from the tab you are on and comparing them with
 Chrome's built-in AI (Gemini Nano). It is an experiment in what on-device AI can do with
-recipes, and it is early: this version saves recipes and reads their ingredients with AI.
+recipes, and it is early: this version saves recipes, reads their ingredients and
+classifies them with AI.
 
 ## Requirements
 
@@ -55,10 +56,25 @@ Once all three are ready, every saved recipe gets its ingredients read by the AI
 3. Gemini Nano returns the name, quantity and unit for each ingredient line. Pages without
    structured recipe data are read from the page text around an "Ingredients" /
    "Ainekset" heading.
+4. Gemini Nano classifies the recipe from its English title and ingredient names: a short
+   dish name ("panna cotta"), a category (main, soup, salad, dessert, baking, breakfast,
+   snack, drink or other) and, when clear, a cuisine.
 
 The recipe card shows each line next to the AI's reading and a simple built-in parser's
 reading, so you can compare them. If you close the side panel mid-way, the work resumes
 the next time it opens; a failed run gets a **Finish AI** button.
+
+## Library
+
+**Open library** groups saved recipes by the AI's dish name (recipes without one fall back
+to their category, then to "Unclassified"). Each recipe has:
+
+- **Finish AI**: runs the AI steps that have not finished yet.
+- **Re-run AI**: discards the AI's results for that recipe and runs every step again.
+- **Delete**: removes the recipe, stopping any AI work on it.
+
+The library runs AI only when you click; unfinished recipes resume on their own only while
+the side panel is open. The AI buttons need on-device AI to be enabled in the side panel.
 
 ## Findings
 
@@ -69,6 +85,7 @@ What Gemini Nano did with real recipes. Filled in from manual testing.
 | Ingredients (JSON-LD)   |               |        |                 |
 | Ingredients (page text) |               |        |                 |
 | Finnish via Translator  |               |        |                 |
+| Classification          |               |        |                 |
 
 ## Privacy
 

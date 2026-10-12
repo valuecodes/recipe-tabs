@@ -6,7 +6,7 @@ import {
 import type { IndexedIngredient, TextIngredient } from "~/ai/parse-response";
 import { ingredientLinesPrompt, ingredientTextPrompt } from "~/ai/prompts";
 import type { PromptRequest } from "~/ai/prompts";
-import { isQuotaError, withTask } from "~/ai/session";
+import { askJson, isQuotaError } from "~/ai/session";
 import type { Ingredient, Recipe } from "~/lib/recipe";
 import { findIngredientWindow, normalizeForMatch } from "~/lib/text-recipe";
 
@@ -54,13 +54,7 @@ const unsupportedLanguage = (language: string): string =>
 const ask = async (
   context: StepContext,
   request: PromptRequest
-): Promise<string> =>
-  withTask(await context.base(), context.signal, (session) =>
-    session.prompt(request.input, {
-      responseConstraint: request.responseConstraint,
-      signal: context.signal,
-    })
-  );
+): Promise<string> => askJson(await context.base(), context.signal, request);
 
 // A batch that does not fit the context is split in half until it does; a
 // single line that still does not fit is skipped with a warning.

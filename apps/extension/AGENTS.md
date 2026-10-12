@@ -73,6 +73,11 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
   `enrich:<id>` (so a `running` recipe whose lock nobody holds was orphaned by a closed
   page and is resumed), and every write is guarded by its `runId` inside the repository
   lock. Only English, and Finnish after translation, is ever sent to the model.
+  Steps: `ingredients-step.ts`, then `classification-step.ts` (which reads the English
+  title and the ingredient names the first step produced). `enricher.rerun(id)` resets the
+  recipe (`resetEnrichment`), which clears `runId` so another page's run drops its writes,
+  and its run waits for the `enrich:<id>` lock instead of skipping. Only the side panel
+  auto-resumes; the library runs AI only on a click.
 - Test fixtures under `src/test/fixtures/` are invented. Never paste real page content.
   `src/test/language-model-stub.ts` stands in for the three AI globals.
 

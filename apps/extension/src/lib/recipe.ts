@@ -178,5 +178,5 @@ const isRecipe = (value: unknown): value is Recipe =>
   isEnrichment(value.enrichment) &&
   isTimestamp(value.savedAt);
 
-export type { EnrichStep, Ingredient, Recipe };
-export { isRecipe, recipeFromCapture };
+export type { Classification, EnrichStep, Ingredient, Recipe };
+export { isRecipe, NO_STRUCTURED_DATA, recipeFromCapture };

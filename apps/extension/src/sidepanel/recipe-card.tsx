@@ -1,4 +1,4 @@
-import { needsEnrichment } from "~/lib/enrichment";
+import { enrichmentLabel } from "~/lib/enrichment";
 import { parseIngredientLine } from "~/lib/ingredient";
 import type { NutrientValue } from "~/lib/nutrition";
 import type { Ingredient, Recipe } from "~/lib/recipe";
@@ -42,18 +42,6 @@ const formatAmount = (
     .filter((part) => part !== "")
     .join(" ");
 
-const enrichmentText = (recipe: Recipe): string => {
-  if (!needsEnrichment(recipe)) {
-    return "AI done";
-  }
-  const { status, error } = recipe.enrichment;
-  if (status === "failed") {
-    return `AI failed: ${error ?? "unknown error"}`;
-  }
-  // `done` here means an older build finished; this one has new steps.
-  return status === "running" ? "AI running…" : "Waiting for on-device AI";
-};
-
 // The original line (and its English translation), Gemini Nano's reading and
 // the deterministic parser's, side by side so the two can be compared.
 const IngredientRow = ({ ingredient }: { ingredient: Ingredient }) => {
@@ -91,7 +79,7 @@ const RecipeCard = ({ recipe, saved }: { recipe: Recipe; saved: boolean }) => {
       )}
       {saved ? (
         <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-          {enrichmentText(recipe)}
+          {enrichmentLabel(recipe)}
         </p>
       ) : null}
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-zinc-700 dark:text-zinc-300">
@@ -110,6 +98,20 @@ const RecipeCard = ({ recipe, saved }: { recipe: Recipe; saved: boolean }) => {
         <dd>{recipe.servings ?? "unknown"}</dd>
         <dt>Ingredients</dt>
         <dd>{recipe.ingredients.length}</dd>
+        {recipe.classification === undefined ? null : (
+          <>
+            <dt>Dish</dt>
+            <dd>
+              {[
+                recipe.classification.dish,
+                recipe.classification.category,
+                recipe.classification.cuisine ?? "",
+              ]
+                .filter((part) => part !== "")
+                .join(" · ")}
+            </dd>
+          </>
+        )}
       </dl>
       {recipe.nutrition === undefined ? null : (
         <ul className="mt-2 text-zinc-700 dark:text-zinc-300">

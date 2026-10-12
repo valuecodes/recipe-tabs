@@ -1,4 +1,6 @@
 import {
+  CATEGORIES,
+  CLASSIFICATION_SCHEMA,
   INDEXED_INGREDIENTS_SCHEMA,
   TEXT_INGREDIENTS_SCHEMA,
 } from "~/ai/schemas";
@@ -7,6 +9,9 @@ import {
 type PromptRequest = {
   input: string;
   responseConstraint: Record<string, unknown>;
+  // The input describes the shape in prose, so the schema is not also added
+  // to the context (it costs tokens).
+  omitResponseConstraintInput?: boolean;
 };
 
 const oneLine = (text: string): string => text.replaceAll(/\s+/g, " ").trim();
@@ -40,5 +45,23 @@ const ingredientTextPrompt = (window: string): PromptRequest => ({
   responseConstraint: TEXT_INGREDIENTS_SCHEMA,
 });
 
+const classificationPrompt = (
+  title: string,
+  names: readonly string[]
+): PromptRequest => ({
+  input: [
+    "Classify this recipe. Answer with JSON: " +
+      '{"dish": the short canonical English name of the dish in lower case, ' +
+      'such as "panna cotta" or "lasagne", "category": one of ' +
+      `${CATEGORIES.join(", ")}, "cuisine": the cuisine in lower case, ` +
+      "only when it is clear}.",
+    "",
+    `Title: ${oneLine(title)}`,
+    `Ingredients: ${names.map(oneLine).join(", ")}`,
+  ].join("\n"),
+  responseConstraint: CLASSIFICATION_SCHEMA,
+  omitResponseConstraintInput: true,
+});
+
 export type { PromptRequest };
-export { ingredientLinesPrompt, ingredientTextPrompt };
+export { classificationPrompt, ingredientLinesPrompt, ingredientTextPrompt };

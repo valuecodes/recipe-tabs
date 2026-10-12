@@ -1,10 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { ingredientLinesPrompt, ingredientTextPrompt } from "~/ai/prompts";
 import {
+  classificationPrompt,
+  ingredientLinesPrompt,
+  ingredientTextPrompt,
+} from "~/ai/prompts";
+import {
+  CATEGORIES,
+  CLASSIFICATION_SCHEMA,
   INDEXED_INGREDIENTS_SCHEMA,
   TEXT_INGREDIENTS_SCHEMA,
 } from "~/ai/schemas";
+
+describe("classificationPrompt", () => {
+  it("describes the shape in prose and omits the schema from the input", () => {
+    const request = classificationPrompt("Panna\n cotta", ["cream", "sugar"]);
+    expect(request.input).toContain("Title: Panna cotta");
+    expect(request.input).toContain("Ingredients: cream, sugar");
+    for (const category of CATEGORIES) {
+      expect(request.input).toContain(category);
+    }
+    expect(request.responseConstraint).toBe(CLASSIFICATION_SCHEMA);
+    expect(request.omitResponseConstraintInput).toBe(true);
+  });
+});
 
 describe("ingredientLinesPrompt", () => {
   it("numbers lines from the batch offset and attaches the schema", () => {
