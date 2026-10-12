@@ -20,6 +20,7 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
 | Dev       | `pnpm --filter extension dev`       |
 | Build     | `pnpm --filter extension build`     |
 | Typecheck | `pnpm --filter extension typecheck` |
+| Test      | `pnpm --filter extension test`      |
 | Clean     | `pnpm --filter extension clean`     |
 
 `dev` is `vite build --watch`, not a dev server: load `apps/extension/dist` unpacked in
@@ -53,6 +54,19 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
   export; without it Vite tree-shakes `run` away and the bundle is just the footer.
 - The service worker only calls `setPanelBehavior`. Chrome stops idle workers, so state
   and AI sessions belong in the pages.
+
+### Source layout
+
+- `src/lib/` is pure and DOM-free: anything from JSON-LD, `chrome.storage` or
+  `executeScript` enters as `unknown` and is narrowed by guards there (`isPageCapture`,
+  `isRecipe`). Tests run in Node (`vitest.config.ts`).
+- `src/content/collect-page.ts` is the only code that reads a page's DOM.
+- `src/storage/`: pages use the `RecipeRepository` type, never `chrome.storage` directly.
+  One key per recipe (`recipe:<normalised url>`); `insert` is idempotent and `insert`,
+  `update`, `remove` hold a Web Lock per recipe id, shared by all extension pages.
+  `app-recipes.ts` holds the page-wide singletons; the factories stay importable in tests
+  without a `chrome` global (`src/test/chrome-stub.ts`).
+- Test fixtures under `src/test/fixtures/` are invented. Never paste real page content.
 
 ### Styling and TypeScript
 

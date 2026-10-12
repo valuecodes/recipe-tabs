@@ -2,7 +2,7 @@
 
 A Chrome extension for saving recipes from the tab you are on and comparing them with
 Chrome's built-in AI (Gemini Nano). It is an experiment in what on-device AI can do with
-recipes, and it is early: this version only opens an empty side panel.
+recipes, and it is early: this version saves recipes and lists them, without AI yet.
 
 ## Requirements
 
@@ -27,6 +27,18 @@ pnpm --filter extension build   # or `dev` to rebuild on every change
 
 After a rebuild, press the reload button on the extension's card.
 
+## Save a recipe
+
+1. On a recipe page, click the Recipe Tabs toolbar icon. This also gives the extension
+   permission to read that one tab.
+2. Click **Detect recipe**. The preview shows the title, servings, ingredient count and any
+   nutrition the site publishes. Pages with schema.org `Recipe` data give the best result;
+   other pages are saved by title and page text.
+3. Click **Save**. **Open library** lists everything you have saved.
+
+If you switch tabs, click the toolbar icon again on the new tab before detecting; the side
+panel says so when it is needed.
+
 ## Privacy
 
 - The extension reads a page only when you click its toolbar icon on that tab (the
@@ -42,6 +54,7 @@ After a rebuild, press the reload button on the extension's card.
 | Dev       | `pnpm --filter extension dev`       |
 | Build     | `pnpm --filter extension build`     |
 | Typecheck | `pnpm --filter extension typecheck` |
+| Test      | `pnpm --filter extension test`      |
 | Clean     | `pnpm --filter extension clean`     |
 
 Linting and formatting are repo-wide: run `pnpm lint` / `pnpm format` from the root.
