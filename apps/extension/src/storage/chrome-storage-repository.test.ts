@@ -58,6 +58,14 @@ describe("createChromeStorageRepository", () => {
     expect((await repository.get(first.id))?.savedAt).toBe(1);
   });
 
+  it("overwrites a corrupt entry on insert", async () => {
+    const repository = createChromeStorageRepository(stub.area);
+    const recipe = makeRecipe("a", 1);
+    stub.data.set(`recipe:${recipe.id}`, { id: recipe.id });
+    expect(await repository.insert(recipe)).toBe(true);
+    expect(await repository.get(recipe.id)).toEqual(recipe);
+  });
+
   it("removes a recipe and update never recreates it", async () => {
     const repository = createChromeStorageRepository(stub.area);
     const recipe = makeRecipe("a", 1);

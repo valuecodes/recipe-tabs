@@ -97,6 +97,7 @@ describe("isRecipe", () => {
     ["bad extraction method", { extraction: { method: "x", warnings: [] } }],
     ["zero servings", { servings: 0 }],
     ["missing savedAt", { savedAt: undefined }],
+    ["savedAt outside the Date range", { savedAt: 1e100 }],
   ])("rejects %s", (_label, patch) => {
     expect(isRecipe({ ...recipe, ...patch })).toBe(false);
   });

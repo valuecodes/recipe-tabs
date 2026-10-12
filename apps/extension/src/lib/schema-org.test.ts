@@ -43,6 +43,16 @@ describe("findRecipeNode + readRecipeNode", () => {
     );
   });
 
+  it("splits a newline-separated ingredient string", () => {
+    const node = findRecipeNode([
+      { "@type": "Recipe", recipeIngredient: "1 egg\n\n2 dl milk\r\n" },
+    ]);
+    expect(node === undefined ? [] : readRecipeNode(node).ingredients).toEqual([
+      "1 egg",
+      "2 dl milk",
+    ]);
+  });
+
   it("returns undefined when there is no Recipe", () => {
     expect(findRecipeNode([noRecipe, "text", null, 4])).toBeUndefined();
   });

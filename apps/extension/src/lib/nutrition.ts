@@ -18,8 +18,9 @@ type Amount = { value: number; unit?: string };
 
 const KJ_PER_KCAL = 4.184;
 
-// "412 kcal", "12,5 g", "1 234 kcal", 7. The unit is the trailing letters.
-// `\s` also matches the no-break space some sites use between thousands.
+// "412 kcal", "12,5 g", "1 234 kcal", 7. The whole value must be a number and
+// an optional unit: "1/2 g" or "12 g sugar" are rejected, never read as 1 or
+// 12. `\s` also matches the no-break space some sites use between thousands.
 const parseAmount = (value: unknown): Amount | undefined => {
   if (typeof value === "number") {
     return Number.isFinite(value) && value >= 0 ? { value } : undefined;
@@ -27,7 +28,7 @@ const parseAmount = (value: unknown): Amount | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
-  const match = /^\s*(\d[\d\s]*(?:[.,]\d+)?)\s*([a-zA-Z]*)/.exec(value);
+  const match = /^\s*(\d[\d\s]*(?:[.,]\d+)?)\s*([a-zA-Z]*)\s*$/.exec(value);
   if (match === null) {
     return undefined;
   }
