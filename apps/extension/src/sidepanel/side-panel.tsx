@@ -15,7 +15,7 @@ type PanelState =
   | { kind: "idle" }
   | { kind: "detecting" }
   | { kind: "preview"; tabId: number; recipe: Recipe; saving: boolean }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; detail?: string };
 
 const TAB_CHANGED = "This tab changed. Detect again.";
 const NOT_A_WEB_PAGE = "Recipe Tabs can't read this kind of page";
@@ -60,7 +60,11 @@ const SidePanel = () => {
       return;
     }
     if (!result.ok) {
-      setState({ kind: "error", message: result.message });
+      setState(
+        result.detail === undefined
+          ? { kind: "error", message: result.message }
+          : { kind: "error", message: result.message, detail: result.detail }
+      );
       return;
     }
     const recipe = recipeFromCapture(result.capture, Date.now());
@@ -130,6 +134,11 @@ const SidePanel = () => {
       {state.kind === "error" ? (
         <p role="alert" className="mt-3 text-red-700 dark:text-red-400">
           {state.message}
+        </p>
+      ) : null}
+      {state.kind === "error" && state.detail !== undefined ? (
+        <p className="mt-1 text-xs wrap-break-word text-zinc-500">
+          Chrome said: {state.detail}
         </p>
       ) : null}
       {state.kind === "preview" ? (

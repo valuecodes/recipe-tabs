@@ -52,8 +52,8 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
   makes the result the script's completion value, which `executeScript` returns. The
   result must be structured-cloneable plain data. `preserveEntrySignatures` keeps the
   export; without it Vite tree-shakes `run` away and the bundle is just the footer.
-- The service worker only calls `setPanelBehavior`. Chrome stops idle workers, so state
-  and AI sessions belong in the pages.
+- The service worker only opens the side panel from `chrome.action.onClicked`. Chrome
+  stops idle workers, so state and AI sessions belong in the pages.
 
 ### Source layout
 
@@ -79,5 +79,8 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
 
 1. **`activeTab` is per tab and per click.** The side panel stays open across tabs, but
    `executeScript` only works on a tab whose toolbar icon the user clicked.
+   Never switch to `setPanelBehavior({ openPanelOnActionClick: true })`: a click that
+   Chrome turns into opening the panel grants no `activeTab`, so every Detect fails
+   with "Cannot access contents of the page".
 2. **`build` does not typecheck** - run `pnpm --filter extension typecheck`.
 3. **Page strings are untrusted.** Anything read from a page renders as React text only.
