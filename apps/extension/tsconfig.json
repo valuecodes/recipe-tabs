@@ -1,0 +1,13 @@
+{
+  "extends": "@repo/typescript/react.json",
+  "include": ["src"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    // `vite/client` declares the `*.css` modules that `import "~/globals.css"`
+    // relies on (TS2882 without it); `chrome` types the extension APIs.
+    "types": ["vite/client", "chrome"],
+    // `~/` is the only way up the tree: oxlint bans `../` imports. Vite reads
+    // this via `resolve.tsconfigPaths`.
+    "paths": { "~/*": ["./src/*"] }
+  }
+}

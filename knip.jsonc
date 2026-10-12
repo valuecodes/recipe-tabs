@@ -11,5 +11,16 @@
         "prettier-plugin-tailwindcss",
       ],
     },
+    "apps/extension": {
+      // Knip's Vite plugin only discovers `index.html`; the extension's
+      // entries are the two pages, the service worker and the injected
+      // extractor (all wired up in vite.config.ts).
+      "entry": [
+        "src/sidepanel/main.tsx",
+        "src/library/main.tsx",
+        "src/background/service-worker.ts",
+        "src/content/extractor.ts",
+      ],
+    },
   },
 }

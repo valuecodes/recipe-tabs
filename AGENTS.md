@@ -12,6 +12,7 @@ Guidelines for AI agents and contributors working in this Turborepo monorepo.
 
 | Name       | Filter       | Description                                                     |
 | ---------- | ------------ | --------------------------------------------------------------- |
+| extension  | `extension`  | Recipe Tabs: Chrome MV3 extension built around Gemini Nano      |
 | playground | `playground` | Vite 8 + React 19 app for experiments, deployable to Cloudflare |
 
 ### Packages (`packages/`)

@@ -1,0 +1,29 @@
+{
+  "name": "extension",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "rm -rf dist && vite build --watch",
+    "build": "rm -rf dist && vite build",
+    "typecheck": "tsc",
+    "clean": "rm -rf .turbo node_modules dist"
+  },
+  "dependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/prettier": "workspace:*",
+    "@repo/typescript": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
+    "@types/chrome": "0.3.0",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "prettier": "@repo/prettier"
+}

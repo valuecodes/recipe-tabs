@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Recipe Tabs",
+  "version": "0.0.1",
+  "description": "Save recipes from the tab you are on and compare them with Chrome's built-in AI. Everything stays in your browser.",
+  "minimum_chrome_version": "138",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "action": {
+    "default_title": "Recipe Tabs"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
