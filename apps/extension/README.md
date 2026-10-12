@@ -2,12 +2,12 @@
 
 A Chrome extension for saving recipes from the tab you are on and comparing them with
 Chrome's built-in AI (Gemini Nano). It is an experiment in what on-device AI can do with
-recipes, and it is early: this version saves recipes and lists them, without AI yet.
+recipes, and it is early: this version saves recipes and reads their ingredients with AI.
 
 ## Requirements
 
 - Chrome 138 or newer (desktop).
-- For the built-in AI features (added later), hardware that Chrome supports for Gemini Nano:
+- For the built-in AI features, hardware that Chrome supports for Gemini Nano:
   Windows 10/11, macOS 13+, Linux or a Chromebook Plus; at least 22 GB of free disk space;
   and either a GPU with more than 4 GB of VRAM or a CPU with 16 GB of RAM and 4+ cores.
   `chrome://on-device-internals` shows the model status.
@@ -38,6 +38,37 @@ After a rebuild, press the reload button on the extension's card.
 
 If you switch tabs, click the toolbar icon again on the new tab before detecting; the side
 panel says so when it is needed.
+
+## On-device AI
+
+The side panel's **On-device AI** box shows three parts of Chrome's built-in AI: the
+language model (Gemini Nano), the language detector and the Finnish → English translator.
+If any of them needs a download, click **Enable on-device AI** once; each shows its own
+progress. The model is large, so the first download takes a while.
+
+Once all three are ready, every saved recipe gets its ingredients read by the AI:
+
+1. The language is detected from the title and the first ingredient lines (falling back
+   to the page's declared language when the detector is unsure).
+2. Finnish recipes are translated to English line by line, because Gemini Nano works in
+   English. Recipes in other languages are not sent to the model; the card says so.
+3. Gemini Nano returns the name, quantity and unit for each ingredient line. Pages without
+   structured recipe data are read from the page text around an "Ingredients" /
+   "Ainekset" heading.
+
+The recipe card shows each line next to the AI's reading and a simple built-in parser's
+reading, so you can compare them. If you close the side panel mid-way, the work resumes
+the next time it opens; a failed run gets a **Finish AI** button.
+
+## Findings
+
+What Gemini Nano did with real recipes. Filled in from manual testing.
+
+| Task                    | Recipes tried | Result | Typical latency |
+| ----------------------- | ------------- | ------ | --------------- |
+| Ingredients (JSON-LD)   |               |        |                 |
+| Ingredients (page text) |               |        |                 |
+| Finnish via Translator  |               |        |                 |
 
 ## Privacy
 

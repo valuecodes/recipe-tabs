@@ -4,8 +4,10 @@
   "exclude": ["node_modules"],
   "compilerOptions": {
     // `vite/client` declares the `*.css` modules that `import "~/globals.css"`
-    // relies on (TS2882 without it); `chrome` types the extension APIs.
-    "types": ["vite/client", "chrome"],
+    // relies on (TS2882 without it); `chrome` types the extension APIs;
+    // `dom-chromium-ai` types the built-in AI globals (LanguageModel,
+    // Translator, LanguageDetector).
+    "types": ["vite/client", "chrome", "dom-chromium-ai"],
     // `~/` is the only way up the tree: oxlint bans `../` imports. Vite reads
     // this via `resolve.tsconfigPaths`.
     "paths": { "~/*": ["./src/*"] }
