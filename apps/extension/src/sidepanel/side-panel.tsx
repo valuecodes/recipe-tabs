@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { enricher } from "~/ai/app-enricher";
-import { isAiReady } from "~/ai/availability";
+import { AI_APIS, isAiReady } from "~/ai/availability";
 import { heldEnrichmentIds } from "~/ai/enrich";
 import {
   findResumable,
@@ -52,6 +52,12 @@ const SidePanel = () => {
   const { recipes } = useRecipes();
   const { status, refresh } = useAiAvailability();
   const ready = isAiReady(status);
+  // Enable cannot fix an API the device or browser does not have.
+  const cannotEnable =
+    status !== undefined &&
+    AI_APIS.some(
+      (api) => status[api] === "unavailable" || status[api] === "unsupported"
+    );
   const [heldIds, setHeldIds] = useState<ReadonlySet<string>>(new Set());
   // Only the newest Detect click may set the preview.
   const requestRef = useRef(0);
@@ -183,7 +189,9 @@ const SidePanel = () => {
           ) : null}
           {!ready && unfinishedCount > 0 ? (
             <span className="block">
-              Enable on-device AI to finish {unfinishedCount} recipe(s).
+              {cannotEnable
+                ? `On-device AI is not available here, so ${String(unfinishedCount)} recipe(s) wait.`
+                : `Enable on-device AI to finish ${String(unfinishedCount)} recipe(s).`}
             </span>
           ) : null}
         </p>

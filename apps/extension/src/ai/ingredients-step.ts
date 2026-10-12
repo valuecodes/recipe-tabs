@@ -21,10 +21,15 @@ type IngredientsResult = {
 };
 
 type StepContext = {
-  base: LanguageModel;
+  // Lazy: creating the base session loads the model, so a step that never
+  // prompts (no text, unsupported language) never pays for it.
+  base: () => Promise<LanguageModel>;
   signal: AbortSignal;
   warnings: string[];
 };
+
+// A page-text line and what the model sees: its translation, or itself.
+type SourceLine = { source: string; english: string };
 
 const BATCH_SIZE = 40;
 const SAMPLE_LINES = 5;
@@ -35,17 +40,22 @@ const NO_SOURCE = "No ingredient text to read";
 const READ_FROM_TEXT =
   "Ingredients were read by the on-device AI from the page text";
 const NO_HEADING = "No ingredients heading found on the page";
-const UNDETERMINED =
-  "The language could not be determined; the AI read the recipe as English";
+const SUPPORTED_LANGUAGES =
+  "the on-device AI supports English, and Finnish through translation";
 
 // The session is English-only (see RECIPE_SESSION_OPTIONS): any language
-// other than English and Finnish is never sent to the model.
+// other than English and Finnish, including an undetermined one, is never
+// sent to the model.
 const unsupportedLanguage = (language: string): string =>
-  `Ingredients in "${language}" were not read: the on-device AI supports ` +
-  "English, and Finnish through translation";
+  language === "und"
+    ? `Ingredients were not read: the language could not be determined, and ${SUPPORTED_LANGUAGES}`
+    : `Ingredients in "${language}" were not read: ${SUPPORTED_LANGUAGES}`;
 
-const ask = (context: StepContext, request: PromptRequest): Promise<string> =>
-  withTask(context.base, context.signal, (session) =>
+const ask = async (
+  context: StepContext,
+  request: PromptRequest
+): Promise<string> =>
+  withTask(await context.base(), context.signal, (session) =>
     session.prompt(request.input, {
       responseConstraint: request.responseConstraint,
       signal: context.signal,
@@ -127,8 +137,15 @@ const readLines = async (
   });
 };
 
-const toIngredient = (item: TextIngredient): Ingredient => {
-  const ingredient: Ingredient = { rawText: item.text, name: item.name };
+const toIngredient = (
+  item: TextIngredient,
+  line: SourceLine,
+  translated: boolean
+): Ingredient => {
+  const ingredient: Ingredient = { rawText: line.source, name: item.name };
+  if (translated) {
+    ingredient.rawTextEn = line.english;
+  }
   if (item.quantity !== undefined) {
     ingredient.quantity = item.quantity;
   }
@@ -138,46 +155,79 @@ const toIngredient = (item: TextIngredient): Ingredient => {
   return ingredient;
 };
 
-// Keeps only items whose `text` quotes the prompted window, once each, so an
-// invented line is never stored as if the page said it.
-const keepQuoted = (
+// Maps each item to the prompted line its `text` quotes, each line once, so an
+// invented line is never stored as if the page said it, and the stored
+// `rawText` is the page's own (untranslated) line.
+const matchQuoted = (
   context: StepContext,
   items: readonly TextIngredient[],
-  window: string
-): TextIngredient[] => {
-  const source = normalizeForMatch(window);
-  const seen = new Set<string>();
-  const kept = items.filter((item) => {
+  lines: readonly SourceLine[],
+  translated: boolean
+): Ingredient[] => {
+  const normalized = lines.map(({ english }) => normalizeForMatch(english));
+  const used = new Set<number>();
+  const ingredients: Ingredient[] = [];
+  for (const item of items) {
     const text = normalizeForMatch(item.text);
-    if (!source.includes(text) || seen.has(text)) {
-      return false;
-    }
-    seen.add(text);
-    return true;
-  });
-  if (kept.length < items.length) {
-    context.warnings.push(
-      `Ignored ${items.length - kept.length} ingredient(s) the AI did not quote from the page`
+    const index = normalized.findIndex(
+      (line, lineIndex) => !used.has(lineIndex) && line.includes(text)
     );
+    const line = lines[index];
+    if (text !== "" && line !== undefined) {
+      used.add(index);
+      ingredients.push(toIngredient(item, line, translated));
+    }
+  }
+  if (ingredients.length < items.length) {
+    context.warnings.push(
+      `Ignored ${items.length - ingredients.length} ingredient(s) the AI did not quote from the page`
+    );
+  }
+  return ingredients;
+};
+
+// The leading lines that fit in `maxChars` (at least one).
+const linesUpTo = (
+  lines: readonly SourceLine[],
+  maxChars: number
+): SourceLine[] => {
+  const kept: SourceLine[] = [];
+  let total = 0;
+  for (const line of lines) {
+    total += line.english.length + 1;
+    if (total > maxChars && kept.length > 0) {
+      break;
+    }
+    kept.push(line);
   }
   return kept;
 };
 
+const promptText = (
+  context: StepContext,
+  lines: readonly SourceLine[]
+): Promise<string> =>
+  ask(
+    context,
+    ingredientTextPrompt(lines.map(({ english }) => english).join("\n"))
+  );
+
 const readText = async (
   context: StepContext,
-  window: string
+  lines: readonly SourceLine[],
+  translated: boolean
 ): Promise<Ingredient[]> => {
-  let prompted = window;
+  let prompted = lines;
   let raw: string;
   try {
-    raw = await ask(context, ingredientTextPrompt(prompted));
+    raw = await promptText(context, prompted);
   } catch (error) {
     if (!isQuotaError(error)) {
       throw error;
     }
-    prompted = window.slice(0, SHORT_WINDOW);
+    prompted = linesUpTo(lines, SHORT_WINDOW);
     try {
-      raw = await ask(context, ingredientTextPrompt(prompted));
+      raw = await promptText(context, prompted);
     } catch (retryError) {
       if (!isQuotaError(retryError)) {
         throw retryError;
@@ -191,18 +241,18 @@ const readText = async (
   if (parsed.warning !== undefined) {
     context.warnings.push(parsed.warning);
   }
-  const kept = keepQuoted(context, parsed.items, prompted);
-  if (kept.length === 0) {
+  const ingredients = matchQuoted(context, parsed.items, prompted, translated);
+  if (ingredients.length === 0) {
     throw new Error(
       context.warnings[0] ?? "The AI found no ingredients in the page text"
     );
   }
-  return kept.map(toIngredient);
+  return ingredients;
 };
 
 const runIngredientsStep = async (
   recipe: Recipe,
-  base: LanguageModel,
+  base: () => Promise<LanguageModel>,
   signal: AbortSignal
 ): Promise<IngredientsResult> => {
   const fromJsonLd = recipe.ingredients.length > 0;
@@ -222,7 +272,7 @@ const runIngredientsStep = async (
       : [window.text.slice(0, SAMPLE_CHARS)]),
   ].join("\n");
   const { language } = await detectLanguage(sample, recipe.language, signal);
-  if (language !== "en" && language !== "fi" && language !== "und") {
+  if (language !== "en" && language !== "fi") {
     return {
       language,
       ingredients: recipe.ingredients,
@@ -230,9 +280,6 @@ const runIngredientsStep = async (
     };
   }
   const context: StepContext = { base, signal, warnings: [] };
-  if (language === "und") {
-    context.warnings.push(UNDETERMINED);
-  }
   const result: IngredientsResult = {
     language,
     ingredients: [],
@@ -255,10 +302,13 @@ const runIngredientsStep = async (
     result.ingredients = await readLines(context, recipe, english);
     return result;
   }
-  const text = finnish
-    ? (await translateLines(window.text.split("\n"), signal)).join("\n")
-    : window.text;
-  result.ingredients = await readText(context, text);
+  const sources = window.text.split("\n").filter((line) => line.trim() !== "");
+  const english = finnish ? await translateLines(sources, signal) : sources;
+  const lines = sources.map((source, index): SourceLine => ({
+    source,
+    english: english[index] ?? source,
+  }));
+  result.ingredients = await readText(context, lines, finnish);
   result.method = "ai";
   context.warnings.unshift(READ_FROM_TEXT);
   if (!window.foundHeading) {

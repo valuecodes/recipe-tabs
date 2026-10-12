@@ -46,7 +46,7 @@ const heldEnrichmentIds = async (): Promise<Set<string>> => {
 const runStep = async (
   step: EnrichStep,
   recipe: Recipe,
-  base: LanguageModel,
+  base: () => Promise<LanguageModel>,
   signal: AbortSignal
 ): Promise<StepPatch> => {
   if (step !== "ingredients") {
@@ -83,15 +83,20 @@ const createEnricher = (repository: RecipeRepository): Enricher => {
     if (!started) {
       return;
     }
+    // Created on the first prompt only (it loads the model), then shared by
+    // the run's tasks; prompts are sequential, so it is created once.
     let base: LanguageModel | undefined;
+    const getBase = async (): Promise<LanguageModel> => {
+      base ??= await createRecipeSession(signal);
+      return base;
+    };
     try {
       for (const step of steps) {
         const recipe = await repository.get(id);
         if (recipe?.enrichment.runId !== runId) {
           return;
         }
-        base ??= await createRecipeSession(signal);
-        const patch = await runStep(step, recipe, base, signal);
+        const patch = await runStep(step, recipe, getBase, signal);
         if (!(await repository.update(id, guarded(runId, patch)))) {
           return;
         }
