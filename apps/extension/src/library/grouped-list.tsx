@@ -31,6 +31,17 @@ const details = (recipe: Recipe): string =>
     .filter((part) => part !== "")
     .join(" · ");
 
+// A stored `running` status with no lock holder means the page running it
+// was closed mid-way: nothing is running now.
+const statusLabel = (recipe: Recipe, held: boolean): string => {
+  if (held) {
+    return "AI running…";
+  }
+  return recipe.enrichment.status === "running" && needsEnrichment(recipe)
+    ? "AI interrupted"
+    : enrichmentLabel(recipe);
+};
+
 const RecipeRow = ({
   recipe,
   actions,
@@ -61,7 +72,7 @@ const RecipeRow = ({
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <span className="text-xs text-zinc-600 dark:text-zinc-400">
-          {held ? "AI running…" : enrichmentLabel(recipe)}
+          {statusLabel(recipe, held)}
         </span>
         {needsEnrichment(recipe) && !held ? (
           <button

@@ -26,9 +26,23 @@ const logError =
 
 const Library = () => {
   const { recipes, loading } = useRecipes();
-  const { status } = useAiAvailability();
+  const { status, refresh } = useAiAvailability();
   const ready = isAiReady(status);
   const [heldIds, setHeldIds] = useState<ReadonlySet<string>>(new Set());
+
+  // AI is enabled from the side panel, in another tab: re-check whenever this
+  // tab is shown again.
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === "visible") {
+        refresh().catch(logError("Failed to check on-device AI"));
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refresh]);
 
   const unfinished = recipes.some(needsEnrichment);
   useEffect(() => {
