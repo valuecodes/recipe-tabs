@@ -42,4 +42,32 @@ const TEXT_INGREDIENTS_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export { INDEXED_INGREDIENTS_SCHEMA, TEXT_INGREDIENTS_SCHEMA };
+const CATEGORIES = [
+  "main",
+  "soup",
+  "salad",
+  "dessert",
+  "baking",
+  "breakfast",
+  "snack",
+  "drink",
+  "other",
+] as const;
+
+const CLASSIFICATION_SCHEMA = {
+  type: "object",
+  properties: {
+    dish: { type: "string" },
+    category: { type: "string", enum: CATEGORIES },
+    cuisine: { type: "string" },
+  },
+  required: ["dish", "category"],
+  additionalProperties: false,
+} as const;
+
+export {
+  CATEGORIES,
+  CLASSIFICATION_SCHEMA,
+  INDEXED_INGREDIENTS_SCHEMA,
+  TEXT_INGREDIENTS_SCHEMA,
+};

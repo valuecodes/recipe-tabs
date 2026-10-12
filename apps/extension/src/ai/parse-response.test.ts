@@ -1,12 +1,69 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseClassification,
   parseIndexedIngredients,
   parseTextIngredients,
 } from "~/ai/parse-response";
 
 const answer = (ingredients: unknown[]): string =>
   JSON.stringify({ ingredients });
+
+describe("parseClassification", () => {
+  it("normalizes a valid answer", () => {
+    expect(
+      parseClassification(
+        JSON.stringify({
+          dish: " Panna  Cotta ",
+          category: "Dessert",
+          cuisine: " Italian ",
+        })
+      )
+    ).toEqual({
+      classification: {
+        dish: "panna cotta",
+        category: "dessert",
+        cuisine: "italian",
+      },
+    });
+  });
+
+  it("rejects a category outside the list", () => {
+    expect(
+      parseClassification(
+        JSON.stringify({ dish: "waffle", category: "brunch" })
+      )
+    ).toEqual({ warning: "The AI's answer had an unknown category" });
+  });
+
+  it("rejects an empty or overlong dish", () => {
+    for (const dish of ["  ", "x".repeat(61), 3]) {
+      expect(
+        parseClassification(JSON.stringify({ dish, category: "main" }))
+          .classification
+      ).toBeUndefined();
+    }
+  });
+
+  it("drops a blank or overlong cuisine but keeps the rest", () => {
+    for (const cuisine of [" ", "x".repeat(41), 7]) {
+      expect(
+        parseClassification(
+          JSON.stringify({ dish: "soup", category: "soup", cuisine })
+        )
+      ).toEqual({ classification: { dish: "soup", category: "soup" } });
+    }
+  });
+
+  it("turns malformed or misshapen output into a warning", () => {
+    expect(parseClassification("{broken")).toEqual({
+      warning: "The AI's answer was not valid JSON",
+    });
+    expect(parseClassification("[]")).toEqual({
+      warning: "The AI's answer was not in the expected shape",
+    });
+  });
+});
 
 describe("parseIndexedIngredients", () => {
   it("reads valid items", () => {

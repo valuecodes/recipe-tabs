@@ -1,9 +1,13 @@
 import {
+  applyClassificationResult,
+  runClassificationStep,
+} from "~/ai/classification-step";
+import {
   applyIngredientsResult,
   runIngredientsStep,
 } from "~/ai/ingredients-step";
 import { createRecipeSession } from "~/ai/session";
-import { missingSteps } from "~/lib/enrichment";
+import { missingSteps, resetEnrichment } from "~/lib/enrichment";
 import type { EnrichStep, Recipe } from "~/lib/recipe";
 import type { RecipeRepository } from "~/storage/repository";
 
@@ -21,6 +25,11 @@ type Enricher = {
   enqueue: (id: string) => void;
   // Abort this page's run for the recipe and drop it from the queue.
   abort: (id: string) => void;
+  // "Re-run AI": abort this page's run, reset the recipe to its captured
+  // state and run every step again. A run in another page loses its runId,
+  // so its writes are dropped, and this run waits for that page's lock
+  // instead of skipping. `false` when the recipe is gone.
+  rerun: (id: string) => Promise<boolean>;
   // Resolves when the queue is empty.
   idle: () => Promise<void>;
 };
@@ -49,11 +58,15 @@ const runStep = async (
   base: () => Promise<LanguageModel>,
   signal: AbortSignal
 ): Promise<StepPatch> => {
-  if (step !== "ingredients") {
-    throw new Error(`The ${step} step is not in this build`);
+  if (step === "ingredients") {
+    const result = await runIngredientsStep(recipe, base, signal);
+    return (current) => applyIngredientsResult(current, result);
   }
-  const result = await runIngredientsStep(recipe, base, signal);
-  return (current) => applyIngredientsResult(current, result);
+  if (step === "classification") {
+    const result = await runClassificationStep(recipe, base, signal);
+    return (current) => applyClassificationResult(current, result);
+  }
+  throw new Error(`The ${step} step is not in this build`);
 };
 
 // Applies the patch only while the stored recipe still belongs to this run.
@@ -65,6 +78,11 @@ const guarded =
 const createEnricher = (repository: RecipeRepository): Enricher => {
   const queue: string[] = [];
   const controllers = new Map<string, AbortController>();
+  // Runs that wait for the recipe's lock instead of skipping when another
+  // page holds it (set by `rerun`).
+  const waiting = new Set<string>();
+  // This page's current run per id, settled when it has fully unwound.
+  const settling = new Map<string, Promise<void>>();
   let draining: Promise<void> | undefined;
 
   const run = async (id: string, signal: AbortSignal): Promise<void> => {
@@ -134,16 +152,22 @@ const createEnricher = (repository: RecipeRepository): Enricher => {
   const runLocked = async (id: string): Promise<void> => {
     const controller = new AbortController();
     controllers.set(id, controller);
+    const wait = waiting.delete(id);
     try {
       await navigator.locks.request(
         lockName(id),
-        { ifAvailable: true },
+        wait ? { signal: controller.signal } : { ifAvailable: true },
         async (lock) => {
           if (lock !== null && !controller.signal.aborted) {
             await run(id, controller.signal);
           }
         }
       );
+    } catch (error) {
+      // An abort while waiting for the lock rejects the request.
+      if (!controller.signal.aborted) {
+        throw error;
+      }
     } finally {
       if (controllers.get(id) === controller) {
         controllers.delete(id);
@@ -153,31 +177,53 @@ const createEnricher = (repository: RecipeRepository): Enricher => {
 
   const drain = async (): Promise<void> => {
     for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
-      try {
-        await runLocked(id);
-      } catch (error) {
-        console.error(`AI enrichment stopped for ${id}`, error);
-      }
+      const recipeId = id;
+      const current = runLocked(recipeId).catch((error: unknown) => {
+        console.error(`AI enrichment stopped for ${recipeId}`, error);
+      });
+      settling.set(recipeId, current);
+      await current;
+      settling.delete(recipeId);
     }
     // Set in the same tick as the empty-queue check, so an `enqueue` can
     // never land between them and be left waiting.
     draining = undefined;
   };
 
+  const enqueue = (id: string): void => {
+    if (queue.includes(id) || controllers.has(id)) {
+      return;
+    }
+    queue.push(id);
+    draining ??= drain();
+  };
+
+  const abort = (id: string): void => {
+    const queued = queue.indexOf(id);
+    if (queued !== -1) {
+      queue.splice(queued, 1);
+    }
+    controllers.get(id)?.abort();
+  };
+
+  const settled = (id: string): Promise<void> =>
+    settling.get(id) ?? Promise.resolve();
+
   return {
-    enqueue: (id) => {
-      if (queue.includes(id) || controllers.has(id)) {
-        return;
+    enqueue,
+    abort,
+    rerun: async (id) => {
+      abort(id);
+      await settled(id);
+      if (!(await repository.update(id, resetEnrichment))) {
+        return false;
       }
-      queue.push(id);
-      draining ??= drain();
-    },
-    abort: (id) => {
-      const queued = queue.indexOf(id);
-      if (queued !== -1) {
-        queue.splice(queued, 1);
-      }
-      controllers.get(id)?.abort();
+      // A run this page started before the reset (an auto-resume) has lost
+      // its runId; let it unwind so `enqueue` does not ignore the id.
+      await settled(id);
+      waiting.add(id);
+      enqueue(id);
+      return true;
     },
     idle: () => draining ?? Promise.resolve(),
   };

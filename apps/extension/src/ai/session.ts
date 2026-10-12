@@ -1,4 +1,5 @@
 import { RECIPE_SESSION_OPTIONS } from "~/ai/availability";
+import type { PromptRequest } from "~/ai/prompts";
 
 const SYSTEM_PROMPT =
   "You read recipes and answer only with JSON in the requested shape. " +
@@ -26,8 +27,25 @@ const withTask = async <T>(
   }
 };
 
+// One schema-constrained prompt on its own clone; the raw answer is parsed by
+// the caller (`ai/parse-response.ts`).
+const askJson = async (
+  base: LanguageModel,
+  signal: AbortSignal,
+  request: PromptRequest
+): Promise<string> =>
+  withTask(base, signal, (session) =>
+    session.prompt(request.input, {
+      responseConstraint: request.responseConstraint,
+      ...(request.omitResponseConstraintInput === true
+        ? { omitResponseConstraintInput: true }
+        : {}),
+      signal,
+    })
+  );
+
 // The prompt did not fit the model's context window.
 const isQuotaError = (error: unknown): boolean =>
   error instanceof Error && error.name === "QuotaExceededError";
 
-export { createRecipeSession, isQuotaError, withTask };
+export { askJson, createRecipeSession, isQuotaError };
