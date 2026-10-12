@@ -98,7 +98,9 @@ const recipeFromCapture = (
   return recipe;
 };
 
-const ENRICH_STEPS: readonly unknown[] = [
+// Every step any build knows about, so data written by a newer build still
+// validates. The steps this build runs are `ENRICH_STEPS` in lib/enrichment.ts.
+const KNOWN_STEPS: readonly unknown[] = [
   "ingredients",
   "classification",
   "nutrition",
@@ -144,7 +146,7 @@ const isEnrichment = (value: unknown): value is Recipe["enrichment"] =>
   isRecord(value) &&
   STATUSES.includes(value.status) &&
   Array.isArray(value.completed) &&
-  value.completed.every((step) => ENRICH_STEPS.includes(step)) &&
+  value.completed.every((step) => KNOWN_STEPS.includes(step)) &&
   isOptional(value.runId, isString) &&
   isOptional(value.error, isString);
 
@@ -176,5 +178,5 @@ const isRecipe = (value: unknown): value is Recipe =>
   isEnrichment(value.enrichment) &&
   isTimestamp(value.savedAt);
 
-export type { Recipe };
+export type { EnrichStep, Ingredient, Recipe };
 export { isRecipe, recipeFromCapture };

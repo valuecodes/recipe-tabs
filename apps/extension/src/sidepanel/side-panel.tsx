@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 
+import { enricher } from "~/ai/app-enricher";
+import { isAiReady } from "~/ai/availability";
+import { heldEnrichmentIds } from "~/ai/enrich";
+import {
+  findResumable,
+  needsEnrichment,
+  summarizeEnrichment,
+} from "~/lib/enrichment";
 import { recipeFromCapture } from "~/lib/recipe";
 import type { Recipe } from "~/lib/recipe";
+import { AiStatusPanel } from "~/sidepanel/ai-status";
 import {
   extractActiveTab,
   getActiveTab,
   isSameTab,
 } from "~/sidepanel/extract-active-tab";
 import { RecipeCard } from "~/sidepanel/recipe-card";
+import { useAiAvailability } from "~/sidepanel/use-ai-availability";
 import { recipeRepository } from "~/storage/app-recipes";
 import { useRecipes } from "~/storage/use-recipes";
 
@@ -16,6 +26,10 @@ type PanelState =
   | { kind: "detecting" }
   | { kind: "preview"; tabId: number; recipe: Recipe; saving: boolean }
   | { kind: "error"; message: string; detail?: string };
+
+// A page that dies mid-run releases its lock without a storage change, so
+// unfinished recipes are also re-checked on a timer.
+const RESCAN_MS = 30_000;
 
 const TAB_CHANGED = "This tab changed. Detect again.";
 const NOT_A_WEB_PAGE = "Recipe Tabs can't read this kind of page";
@@ -36,8 +50,49 @@ const openLibrary = (): void => {
 const SidePanel = () => {
   const [state, setState] = useState<PanelState>({ kind: "idle" });
   const { recipes } = useRecipes();
+  const { status, refresh } = useAiAvailability();
+  const ready = isAiReady(status);
+  const [heldIds, setHeldIds] = useState<ReadonlySet<string>>(new Set());
   // Only the newest Detect click may set the preview.
   const requestRef = useRef(0);
+
+  // Resume unfinished recipes (new saves included) once the AI is ready: on
+  // every recipe change, and on a timer while any recipe is unfinished.
+  const unfinished = recipes.some(needsEnrichment);
+  useEffect(() => {
+    let cancelled = false;
+    const scan = async (): Promise<void> => {
+      const held = await heldEnrichmentIds();
+      if (cancelled) {
+        return;
+      }
+      setHeldIds(held);
+      if (ready) {
+        for (const recipe of findResumable(recipes, held)) {
+          enricher.enqueue(recipe.id);
+        }
+      }
+    };
+    const scanSafely = (): void => {
+      scan().catch((error: unknown) => {
+        console.error("Failed to check AI enrichment", error);
+      });
+    };
+    scanSafely();
+    const timer = unfinished ? setInterval(scanSafely, RESCAN_MS) : undefined;
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [ready, recipes, unfinished]);
+
+  const finishFailed = (): void => {
+    for (const recipe of recipes) {
+      if (needsEnrichment(recipe) && recipe.enrichment.status === "failed") {
+        enricher.enqueue(recipe.id);
+      }
+    }
+  };
 
   // A preview belongs to the tab it was read from: drop it on tab switch.
   useEffect(() => {
@@ -86,7 +141,8 @@ const SidePanel = () => {
         }
         return;
       }
-      // `false` means it was already saved; the list below shows that.
+      // `false` means it was already saved; the list below shows that. The
+      // resume effect starts the AI steps once the new recipe shows up.
       await recipeRepository.insert(recipe);
     } catch (error) {
       console.error("Failed to save the recipe", error);
@@ -100,13 +156,38 @@ const SidePanel = () => {
     }
   };
 
-  const alreadySaved =
-    state.kind === "preview" &&
-    recipes.some((saved) => saved.id === state.recipe.id);
+  // Once saved, show the stored recipe so AI results appear as they land.
+  const stored =
+    state.kind === "preview"
+      ? recipes.find((saved) => saved.id === state.recipe.id)
+      : undefined;
+  const summary = summarizeEnrichment(recipes, heldIds);
+  const unfinishedCount = summary.waiting + summary.failed;
 
   return (
     <main className="p-4 text-sm">
       <h1 className="text-base font-semibold">Recipe Tabs</h1>
+      <AiStatusPanel status={status} refresh={refresh} />
+      {summary.running + unfinishedCount === 0 ? null : (
+        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+          AI: {summary.running} running · {summary.waiting} waiting ·{" "}
+          {summary.failed} failed
+          {ready && summary.failed > 0 ? (
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={finishFailed}
+            >
+              Finish AI
+            </button>
+          ) : null}
+          {!ready && unfinishedCount > 0 ? (
+            <span className="block">
+              Enable on-device AI to finish {unfinishedCount} recipe(s).
+            </span>
+          ) : null}
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
@@ -143,8 +224,11 @@ const SidePanel = () => {
       ) : null}
       {state.kind === "preview" ? (
         <>
-          <RecipeCard recipe={state.recipe} />
-          {alreadySaved ? (
+          <RecipeCard
+            recipe={stored ?? state.recipe}
+            saved={stored !== undefined}
+          />
+          {stored !== undefined ? (
             <p className="mt-3 text-green-700 dark:text-green-400">
               Saved in your library.
             </p>

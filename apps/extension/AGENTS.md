@@ -66,12 +66,21 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
   `update`, `remove` hold a Web Lock per recipe id, shared by all extension pages.
   `app-recipes.ts` holds the page-wide singletons; the factories stay importable in tests
   without a `chrome` global (`src/test/chrome-stub.ts`).
+- `src/ai/`: Chrome's built-in AI (Prompt API / Gemini Nano, Language Detector,
+  Translator fi→en). Sessions live in pages, never in the service worker. Every task runs
+  on a `clone()` of one base session and destroys it. `enrich.ts` runs the steps in
+  `ENRICH_STEPS` (`src/lib/enrichment.ts`, grows as steps ship): a run holds the Web Lock
+  `enrich:<id>` (so a `running` recipe whose lock nobody holds was orphaned by a closed
+  page and is resumed), and every write is guarded by its `runId` inside the repository
+  lock. Only English, and Finnish after translation, is ever sent to the model.
 - Test fixtures under `src/test/fixtures/` are invented. Never paste real page content.
+  `src/test/language-model-stub.ts` stands in for the three AI globals.
 
 ### Styling and TypeScript
 
 - Same as playground: `src/globals.css` + `.postcssrc.json` (keep that name), and
-  `"types": ["vite/client", "chrome"]` in `tsconfig.json`.
+  `"types": ["vite/client", "chrome", "dom-chromium-ai"]` in `tsconfig.json`. The AI
+  globals are typed but may be missing at runtime: check `"LanguageModel" in globalThis`.
 
 ---
 
@@ -84,3 +93,7 @@ This directory inherits `/AGENTS.md`. This file lists only additions and overrid
    with "Cannot access contents of the page".
 2. **`build` does not typecheck** - run `pnpm --filter extension typecheck`.
 3. **Page strings are untrusted.** Anything read from a page renders as React text only.
+   So does model output, which is also parsed through guards (`src/ai/parse-response.ts`).
+4. **`create()` needs the user gesture when a model must download.** Call all three
+   `create()`s synchronously inside the click handler (`sidepanel/ai-status.tsx`); one
+   `await` before them and the gesture is gone.
