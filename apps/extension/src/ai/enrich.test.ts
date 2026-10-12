@@ -163,9 +163,50 @@ describe("createEnricher", () => {
     install({ detected: [{ detectedLanguage: "de", confidence: 0.95 }] });
     const stored = await enrich(makeRecipe({ title: "Pfannkuchen mit Milch" }));
     expect(ai.calls.prompts).toEqual([]);
+    expect(ai.calls.sessionsCreated).toBe(0);
     expect(stored?.language).toBe("de");
     expect(stored?.enrichment.status).toBe("done");
     expect(stored?.extraction.warnings[0]).toMatch(/Ingredients in "de"/);
+  });
+
+  it("never prompts when the language is undetermined", async () => {
+    install({ detected: [{ detectedLanguage: "und", confidence: 0.9 }] });
+    const stored = await enrich(makeRecipe({ language: "und" }));
+    expect(ai.calls.prompts).toEqual([]);
+    expect(ai.calls.sessionsCreated).toBe(0);
+    expect(stored?.enrichment.status).toBe("done");
+    expect(stored?.extraction.warnings[0]).toMatch(
+      /language could not be determined/
+    );
+  });
+
+  it("keeps the Finnish source line when reading page text", async () => {
+    install({ detected: FINNISH });
+    const stored = await enrich(
+      makeRecipe({
+        title: "Pannukakku",
+        language: "fi",
+        ingredients: [],
+        pageText: "Tarina\n\nAinekset\n2 dl maitoa\n1 muna\nOhje",
+      }),
+      [
+        answer([
+          { text: "EN 2 dl maitoa", name: "milk", quantity: 2, unit: "dl" },
+          { text: "1 muna", name: "egg" },
+        ]),
+      ]
+    );
+    expect(stored?.ingredients).toEqual([
+      {
+        rawText: "2 dl maitoa",
+        rawTextEn: "EN 2 dl maitoa",
+        name: "milk",
+        quantity: 2,
+        unit: "dl",
+      },
+      { rawText: "1 muna", rawTextEn: "EN 1 muna", name: "egg" },
+    ]);
+    expect(ai.calls.translated).not.toContain("");
   });
 
   it("batches 40 lines with recipe-wide indexes", async () => {
