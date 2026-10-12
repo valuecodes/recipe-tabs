@@ -38,8 +38,9 @@ const createChromeStorageRepository = (
     get: read,
     insert: (recipe) =>
       withLock(recipe.id, async () => {
-        const items = await area.get(keyOf(recipe.id));
-        if (items[keyOf(recipe.id)] !== undefined) {
+        // A stored value that fails `isRecipe` is invisible to every page,
+        // so it must not block saving: overwrite it.
+        if ((await read(recipe.id)) !== undefined) {
           return false;
         }
         await write(recipe);

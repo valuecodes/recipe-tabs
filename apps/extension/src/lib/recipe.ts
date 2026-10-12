@@ -151,6 +151,11 @@ const isEnrichment = (value: unknown): value is Recipe["enrichment"] =>
 const isPositiveNumber = (value: unknown): value is number =>
   isFiniteNumber(value) && value > 0;
 
+// Finite is not enough: `new Date(1e100)` is an Invalid Date and formatting
+// it throws, which would take the whole library list down.
+const isTimestamp = (value: unknown): value is number =>
+  isFiniteNumber(value) && !Number.isNaN(new Date(value).getTime());
+
 // Storage reads are `unknown`: validate every field a consumer reads, so one
 // malformed entry is skipped instead of crashing a page.
 const isRecipe = (value: unknown): value is Recipe =>
@@ -169,7 +174,7 @@ const isRecipe = (value: unknown): value is Recipe =>
   isExtraction(value.extraction) &&
   isOptional(value.pageText, isString) &&
   isEnrichment(value.enrichment) &&
-  isFiniteNumber(value.savedAt);
+  isTimestamp(value.savedAt);
 
 export type { Recipe };
 export { isRecipe, recipeFromCapture };

@@ -17,12 +17,18 @@ describe("parseAmount", () => {
     expect(parseAmount(input)).toEqual(expected);
   });
 
-  it.each([["-3 g"], ["n/a"], [-1], [Number.NaN], [null]])(
-    "rejects %j",
-    (input) => {
-      expect(parseAmount(input)).toBeUndefined();
-    }
-  );
+  it.each([
+    ["-3 g"],
+    ["n/a"],
+    ["1/2 g"],
+    ["12 g sugar"],
+    ["1.5.2 g"],
+    [-1],
+    [Number.NaN],
+    [null],
+  ])("rejects %j", (input) => {
+    expect(parseAmount(input)).toBeUndefined();
+  });
 });
 
 describe("fromSchemaNutrition", () => {

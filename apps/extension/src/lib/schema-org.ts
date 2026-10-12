@@ -95,9 +95,10 @@ const cleanText = (text: string): string =>
 const cleanList = (values: readonly string[]): string[] =>
   values.map(cleanText).filter((text) => text !== "");
 
+// Some sites give `recipeIngredient` as one newline-separated string.
 const readStrings = (value: unknown): string[] => {
   if (typeof value === "string") {
-    return [value];
+    return value.split(/\r?\n/);
   }
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
